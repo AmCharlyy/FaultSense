@@ -1,0 +1,7 @@
+{
+  "name": "FaultSense",
+  "description": "Un sistema de gestión de incidentes y dashboard analítico de nivel empresarial, diseñado con una estética minimalista inspirada en Apple. Incluye análisis predictivo con IA.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

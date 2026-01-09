@@ -1,0 +1,15 @@
+# Carpeta de dependencias (muy pesadas)
+node_modules/
+**/node_modules/
+
+# Archivos de Firebase
+.firebase/
+fireba-debug.log
+*.log
+
+# Carpetas de construcción (se generan al compilar)
+frontend/dist/
+
+# Variables de entorno (seguridad)
+.env
+.env.local
