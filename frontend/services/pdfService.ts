@@ -1,214 +1,281 @@
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable"; // Importante: npm install jspdf-autotable
+import autoTable from "jspdf-autotable";
 import { Incident } from "../types";
 
-// --- Configuración de Estilo Premium ---
+// --- COLORES CORPORATIVOS (Estilo VW/Audi) ---
 const COLORS = {
-  primary: "#1e3a8a",    // Azul corporativo oscuro
-  secondary: "#64748b",  // Slate gray para textos secundarios
-  accent: "#f59e0b",     // Acento sutil (opcional)
-  text: "#1e293b",       // Texto principal (no usar negro puro)
-  lightBg: "#f8fafc",    // Fondo muy suave
-  white: "#ffffff"
+  headerBlue: "#004b93", // Azul VW
+  headerText: "#ffffff",
+  darkGray: "#404040",   // Gris oscuro para títulos
+  lightGray: "#e5e7eb",  // Gris claro para fondos alternos
+  alertRed: "#cc0000",   // Rojo corporativo
+  textBlack: "#000000"
+};
+
+// --- HELPER: Calcular número de semana ISO ---
+const getWeekNumber = (d: Date) => {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 };
 
 export const generateIncidentReport = (incident: Incident) => {
-  // Configuración A4 estándar
+  // 1. Configuración Horizontal (Landscape)
   const doc = new jsPDF({
-    orientation: "portrait",
+    orientation: "landscape",
     unit: "mm",
     format: "a4"
   });
 
-  const pageWidth = doc.internal.pageSize.width;
-  const pageHeight = doc.internal.pageSize.height;
-  const margin = 20;
+  const width = doc.internal.pageSize.width;
+  const height = doc.internal.pageSize.height;
+  const margin = 10;
 
-  // --- Helpers ---
-  const addHeader = () => {
-    // Franja decorativa lateral
-    doc.setFillColor(COLORS.primary);
-    doc.rect(0, 0, 6, pageHeight, 'F');
+  // CÁLCULO DE LA SEMANA (Corrección del error)
+  const incidentDate = new Date(incident.createdAt);
+  const weekNum = getWeekNumber(incidentDate);
+  const weekStr = `${weekNum}.${incidentDate.getDay()}`; // Formato Semana.Día (ej: 50.6)
 
-    // Título Principal
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(24);
-    doc.setTextColor(COLORS.primary);
-    doc.text("REPORTE DE INCIDENCIA", margin, 30);
-    
-    // Subtítulo / Sistema
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(COLORS.secondary);
-    doc.text("SISTEMA DE CONTROL DE CALIDAD Q-TICKER", margin, 36);
-
-    // Caja de Folio y Fecha (Diseño flotante derecha)
-    const rightInfoX = pageWidth - margin - 50;
-    doc.setTextColor(COLORS.text);
-    doc.setFontSize(10);
-    doc.text("FOLIO:", rightInfoX, 30, { align: "right" });
-    doc.text("FECHA:", rightInfoX, 36, { align: "right" });
-
-    doc.setFont("helvetica", "bold");
-    doc.text(incident.folio, pageWidth - margin, 30, { align: "right" });
-    doc.text(new Date(incident.createdAt).toLocaleDateString(), pageWidth - margin, 36, { align: "right" });
-
-    // Línea separadora
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(margin, 45, pageWidth - margin, 45);
-  };
-
-  const addFooter = (pageNumber: number, totalPages: number) => {
+  // ==========================================
+  // 1. ENCABEZADO SUPERIOR (Texto Obligatorio)
+  // ==========================================
+  const drawHeader = () => {
+    // Esquina Superior Derecha - Clasificación
     doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    const footerText = `Generado por Q-Ticker Platform | Página ${pageNumber} de ${totalPages}`;
-    doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(COLORS.textBlack);
+    doc.text("INTERNAL / INTERNO", width - margin, 7, { align: "right" });
+    
+    // Esquina Superior Izquierda - Título
+    doc.setFontSize(14);
+    doc.setTextColor(COLORS.alertRed);
+    doc.text("Q-Ticker Q MoMo EA888", margin, 12);
+
+    // Centro - Semana y Año
+    doc.setFontSize(10);
+    doc.setTextColor(COLORS.textBlack);
+    doc.text(`SEM ${weekStr}  ${incidentDate.getFullYear()}`, width / 2, 12, { align: "center" });
+
+    // Derecha - Planta
+    doc.text("PLANTA GUANAJUATO", width - margin, 12, { align: "right" });
   };
 
-  // --- 1. Renderizar Header ---
-  addHeader();
+  drawHeader();
 
-  // --- 2. Tabla de Detalles (Layout de 2 Columnas simulado con AutoTable) ---
-  // Usar AutoTable da un alineado perfecto y fondos profesionales
+  // ==========================================
+  // 2. TABLA DE DATOS DE CABECERA (Franja Azul)
+  // ==========================================
   autoTable(doc, {
-    startY: 55,
-    margin: { left: margin, right: margin },
-    head: [['INFORMACIÓN GENERAL', 'UBICACIÓN Y ORIGEN']],
-    body: [
+    startY: 15,
+    theme: 'grid',
+    head: [
       [
-        `Estado: ${incident.status}\nTurno: ${incident.shift}\nFecha Sch.: ${incident.schadentischDate}`, 
-        `Cliente: ${incident.client}\nÁrea: ${incident.area}\nOrigen: ${incident.origin}`
-      ],
-      [
-        `Sorte: ${incident.sorte}\nResponsable: ${incident.responsibleName || 'N/A'}`,
-        `Categoría: ${incident.category}`
+        { content: 'Pieza 1 / CKD', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText, halign: 'center' } },
+        { content: incident.origin || 'XXAXXXXXXAA', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText, halign: 'center' } },
+        { content: 'Proveedor de la pieza 1', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText, halign: 'center' } },
+        { content: 'Responsable de la pieza 1', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText, halign: 'center' } }
       ]
     ],
-    theme: 'grid',
-    headStyles: {
-      fillColor: COLORS.primary,
-      textColor: COLORS.white,
-      fontSize: 10,
-      fontStyle: 'bold',
-      halign: 'left'
+    body: [
+      [
+        { content: incident.folio, styles: { fontStyle: 'bold', halign: 'center' } },
+        { content: 'OP: 70  |  RB  |  LT', styles: { halign: 'center', fontSize: 8 } },
+        { content: 'LOG / CPC', styles: { halign: 'center' } },
+        { content: `Cliente: ${incident.client}\nResp: ${incident.responsibleName}`, styles: { fontSize: 8 } }
+      ],
+      // Fila Gris de Datos Técnicos
+      [
+        { content: `Fecha 1er falla: ${incidentDate.toLocaleDateString()}`, styles: { fillColor: COLORS.lightGray, fontSize: 8 } },
+        { content: `Reincidencias: 0`, styles: { fillColor: COLORS.lightGray, fontSize: 8 } },
+        { content: `MoMo: X   PC`, styles: { fillColor: COLORS.lightGray, halign: 'center', fontSize: 8 } },
+        { content: `Turno: ${incident.shift}`, styles: { fillColor: COLORS.lightGray, halign: 'center', fontSize: 8 } }
+      ]
+    ],
+    styles: { 
+        lineColor: [255, 255, 255], 
+        lineWidth: 0.1, 
+        cellPadding: 2,
+        fontSize: 9 
     },
-    bodyStyles: {
-      textColor: COLORS.text,
-      fontSize: 9,
-      cellPadding: 6,
-      lineColor: [230, 230, 230]
-    },
-    columnStyles: {
-      0: { cellWidth: 'auto' }, // Columna 1
-      1: { cellWidth: 'auto' }  // Columna 2
-    },
-    styles: { overflow: 'linebreak' },
+    margin: { left: margin, right: margin }
   });
 
-  // --- 3. Descripción Detallada ---
-  // @ts-ignore (para evitar errores de tipado con lastAutoTable)
-  let currentY = doc.lastAutoTable.finalY + 15;
+  // ==========================================
+  // 3. CUERPO PRINCIPAL (IMAGEN IZQ + TEXTO DER)
+  // ==========================================
+  // @ts-ignore
+  const startYMain = doc.lastAutoTable.finalY + 2;
+  const footerHeight = 40; // Espacio reservado para el pie de página
+  const availableHeight = height - startYMain - footerHeight;
 
+  autoTable(doc, {
+    startY: startYMain,
+    theme: 'grid',
+    body: [
+      // FILA 1: La celda izquierda tiene rowSpan 4 para ocupar TODO el alto lateral
+      [
+        { 
+            content: '', 
+            rowSpan: 4, 
+            styles: { 
+                minCellWidth: 90, // Ancho fijo para la zona de imagen
+                valign: 'middle', 
+                halign: 'center' 
+            } 
+        },
+        // Columna Derecha: Falla
+        { 
+            content: `Falla / Failure:\n\n${incident.description}`, 
+            styles: { 
+                fillColor: COLORS.darkGray, 
+                textColor: COLORS.headerText, 
+                fontStyle: 'bold',
+                minCellHeight: availableHeight * 0.15 
+            } 
+        }
+      ],
+      // FILA 2: Causa (Derecha)
+      [
+        { 
+            content: `Causa-Hipótesis / Cause-Hypothesis:\n\n${incident.category || 'C1. Defecto en material identificado en estación 70.'}`, 
+            styles: { fillColor: COLORS.lightGray, minCellHeight: availableHeight * 0.2 } 
+        }
+      ],
+      // FILA 3: Análisis (Derecha)
+      [
+        { 
+            content: `Análisis / Analysis:\n\nSe confirma desviación visual en la pieza.\n${incident.description}`, 
+            styles: { fillColor: COLORS.lightGray, minCellHeight: availableHeight * 0.35 } 
+        }
+      ],
+      // FILA 4: Acciones (Derecha)
+      [
+        { 
+            content: `Acciones Inmediatas / Immediate Actions:\n\n1. Se revisa material en el PoU.\n2. Se notifica a calidad.\n3. 100% Sorting.`, 
+            styles: { fillColor: COLORS.headerText, textColor: COLORS.textBlack, fontStyle: 'bold', minCellHeight: availableHeight * 0.3 } 
+        }
+      ]
+    ],
+    styles: {
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1,
+        fontSize: 9,
+        cellPadding: 3,
+        overflow: 'linebreak'
+    },
+    columnStyles: {
+        0: { cellWidth: 90 }, // Columna Imagen
+        1: { cellWidth: 'auto' } // Columna Texto
+    },
+    // --- INYECCIÓN DE IMAGEN EN LA CELDA UNIFICADA ---
+    didDrawCell: (data) => {
+        // Solo dibujamos en la columna 0 y fila 0 (que es la fusionada)
+        if (data.column.index === 0 && data.row.index === 0 && data.section === 'body') {
+            
+            // Fondo suave para el área de imagen
+            doc.setFillColor("#f3f4f6");
+            doc.rect(data.cell.x, data.cell.y, data.cell.width, data.cell.height, 'F');
+
+            // Etiqueta
+            doc.setFontSize(7);
+            doc.setTextColor("#6b7280");
+            doc.text("EVIDENCIA VISUAL", data.cell.x + 5, data.cell.y + 5);
+
+            if (incident.evidenceUrl) {
+                try {
+                    const padding = 4;
+                    // Espacio disponible dentro de la celda
+                    const availableW = data.cell.width - (padding * 2);
+                    const availableH = data.cell.height - (padding * 2);
+
+                    // Insertar imagen centrada y contenida (CONTAIN)
+                    doc.addImage(
+                        incident.evidenceUrl, 
+                        'JPEG', 
+                        data.cell.x + padding, 
+                        data.cell.y + padding + 5, 
+                        availableW, 
+                        availableH - 5
+                    );
+                    
+                    // Borde rojo fino alrededor de la imagen (estilo técnico)
+                    doc.setDrawColor(COLORS.alertRed);
+                    doc.setLineWidth(0.3);
+                    doc.rect(data.cell.x + padding, data.cell.y + padding + 5, availableW, availableH - 5);
+
+                } catch (e) {
+                    doc.text("(Error cargando img)", data.cell.x + 10, data.cell.y + 20);
+                }
+            }
+        }
+    }
+  });
+
+  // ==========================================
+  // 4. PIE DE PÁGINA DE DATOS (Tabla inferior)
+  // ==========================================
+  // @ts-ignore
+  const finalY = doc.lastAutoTable.finalY + 2;
+
+  autoTable(doc, {
+    startY: finalY,
+    theme: 'grid',
+    head: [
+        [
+            { content: 'Folio(s) afectado(s)', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText } },
+            { content: 'Motores afectados', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText } },
+            { content: 'Piezas NOK', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText } },
+            { content: 'ESP-Q MoMo', styles: { fillColor: COLORS.headerBlue, textColor: COLORS.headerText } }
+        ]
+    ],
+    body: [
+        [
+            { content: incident.folio, styles: { fillColor: COLORS.lightGray, fontStyle: 'bold' } },
+            { content: '1', styles: { fillColor: COLORS.lightGray } },
+            { content: '1', styles: { fillColor: COLORS.lightGray } },
+            { content: incident.responsibleName || 'Nombre del especialista', styles: { fillColor: COLORS.lightGray } }
+        ],
+        // Fila extra para códigos DMC
+        [
+            { content: `DMC: ${incident.area || 'XAXXXXXXXXXXXXXXXXXXXXX'}`, colSpan: 4, styles: { fontSize: 7, halign: 'left' } }
+        ]
+    ],
+    styles: { 
+        halign: 'center', 
+        fontSize: 8, 
+        cellPadding: 1.5,
+        lineColor: [200, 200, 200],
+        lineWidth: 0.1
+    },
+    margin: { left: margin, right: margin }
+  });
+
+  // ==========================================
+  // 5. PIE DE PÁGINA LEGAL OBLIGATORIO
+  // ==========================================
+  const footerY = height - 12;
+  
+  doc.setFontSize(6);
+  doc.setTextColor(COLORS.textBlack);
+  
+  // Bloque Izquierdo
+  doc.text("Elaboró: Calidad Montaje", margin, footerY);
+  doc.text("Presentación fallas / Calidad Montaje / 4202", margin, footerY + 3);
+  doc.text("KSU: 2.2 / 7 años", margin, footerY + 6);
+
+  // Bloque Central (Fecha Impresión)
+  const today = new Date().toLocaleDateString();
+  doc.text(today, width / 2, footerY + 6, { align: "center" });
+
+  // Bloque Derecho (Obligatorio)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(COLORS.primary);
-  doc.text("DESCRIPCIÓN DETALLADA", margin, currentY);
+  doc.text("INTERNAL / INTERNO", width - margin, footerY + 6, { align: "right" });
   
-  // Fondo gris suave para la descripción
-  currentY += 5;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(COLORS.text);
-  
-  const descText = doc.splitTextToSize(incident.description, pageWidth - (margin * 2) - 4);
-  const textHeight = descText.length * 5;
-  
-  // Dibujar caja de fondo para la descripción
-  doc.setFillColor(COLORS.lightBg);
-  doc.setDrawColor(220, 220, 220);
-  doc.roundedRect(margin, currentY, pageWidth - (margin * 2), textHeight + 10, 2, 2, 'FD');
-  
-  doc.text(descText, margin + 4, currentY + 7);
-  
-  currentY += textHeight + 25;
+  // Línea de corte o marca de agua inferior
+  doc.setDrawColor(100, 100, 100);
+  doc.setLineWidth(0.1);
+  doc.line(margin, footerY - 2, width - margin, footerY - 2);
 
-  // --- 4. Evidencia Visual (Manejo inteligente de salto de página) ---
-  if (incident.evidenceUrl) {
-    // Si no hay espacio (aprox 80mm), nueva página
-    if (currentY + 80 > pageHeight - 40) {
-      doc.addPage();
-      addHeader();
-      currentY = 55;
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(COLORS.primary);
-    doc.text("EVIDENCIA VISUAL", margin, currentY);
-    
-    doc.setDrawColor(COLORS.secondary);
-    doc.line(margin, currentY + 2, pageWidth - margin, currentY + 2);
-
-    try {
-      // Caja contenedora de imagen
-      const imgHeight = 80; // Altura fija para mantener uniformidad
-      const imgWidth = 120; // Ancho máximo
-      const imgX = (pageWidth - imgWidth) / 2; // Centrado
-      
-      // Nota: addImage asume que la URL es accesible o base64. 
-      // Si tienes problemas de CORS, deberás convertirla a base64 antes.
-      doc.addImage(incident.evidenceUrl, 'JPEG', imgX, currentY + 10, imgWidth, imgHeight);
-      
-      // Borde alrededor de la imagen para que se vea "foto"
-      doc.setDrawColor(200, 200, 200);
-      doc.rect(imgX, currentY + 10, imgWidth, imgHeight);
-      
-      currentY += imgHeight + 20;
-    } catch (e) {
-      console.error("Error cargando imagen", e);
-      doc.setFontSize(8);
-      doc.setTextColor("red");
-      doc.text("No se pudo cargar la evidencia visual.", margin, currentY + 10);
-      currentY += 20;
-    }
-  }
-
-  // --- 5. Firmas (Siempre al final, verifica espacio) ---
-  const signatureHeight = 40;
-  if (currentY + signatureHeight > pageHeight - 30) {
-    doc.addPage();
-    addHeader();
-    currentY = 55;
-  }
-
-  // Posicionar firmas al final del contenido o al pie de página si hay mucho espacio
-  // Optamos por "sticky bottom" si hay espacio, o "flow" si no.
-  let sigY = Math.max(currentY + 10, pageHeight - 50);
-
-  doc.setDrawColor(150, 150, 150);
-  doc.setLineWidth(0.5);
-
-  // Firma 1
-  doc.line(margin + 10, sigY, margin + 80, sigY);
-  doc.setFontSize(9);
-  doc.setTextColor(COLORS.secondary);
-  doc.text("FIRMA RESPONSABLE", margin + 45, sigY + 5, { align: "center" });
-  doc.setFontSize(7);
-  doc.text(incident.responsibleName || "", margin + 45, sigY + 9, { align: "center" });
-
-  // Firma 2
-  doc.line(pageWidth - margin - 80, sigY, pageWidth - margin - 10, sigY);
-  doc.setFontSize(9);
-  doc.text("FIRMA CALIDAD / CLIENTE", pageWidth - margin - 45, sigY + 5, { align: "center" });
-
-  // --- 6. Numeración de Páginas ---
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    addFooter(i, totalPages);
-  }
-
-  // --- Guardar ---
-  doc.save(`QTICKER_${incident.folio}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.save(`QTICKER_${incident.folio}.pdf`);
 };

@@ -1,8 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Loader2, UploadCloud, ChevronDown, Camera, Trash2, ImageIcon } from 'lucide-react';
+import { X, Sparkles, Loader2, UploadCloud, ChevronDown, Camera, Trash2, ImageIcon, Mic } from 'lucide-react';
 import { Incident, Severity, Status } from '../types';
 import { analyzeIncidentDescription } from '../services/geminiService';
+import { DamageAnnotator } from './DamageAnnotator'; 
+// 1. IMPORTAR EL HOOK DE VOZ INTELIGENTE
+import { useSmartVoice } from '../hooks/useSmartVoice';
 
 interface IncidentModalProps {
   isOpen: boolean;
@@ -12,10 +14,10 @@ interface IncidentModalProps {
 }
 
 export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, onSave, incidentToEdit }) => {
-  // Q-TICKER Form State
+  // --- Estados del Formulario ---
   const [formData, setFormData] = useState({
     folio: '',
-    title: '', // Internal summary
+    title: '',
     schadentischDate: new Date().toISOString().split('T')[0],
     shift: 1,
     sorte: 0,
@@ -34,11 +36,35 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   
-  // Image Upload State
+  // --- Estados de Imagen y Anotador ---
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showAnnotator, setShowAnnotator] = useState(false);
+  const [tempImage, setTempImage] = useState<string | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 2. INICIALIZAR EL HOOK DE VOZ
+  const { isListening, isProcessing, startSmartListening, stopAndAnalyze } = useSmartVoice();
+
+  // 3. CALLBACK PARA LLENAR LOS CAMPOS AUTOMÁTICAMENTE
+  const handleSmartFill = (data: any) => {
+    setFormData(prev => ({
+      ...prev,
+      // Solo actualizamos si la IA encontró algo, si no, mantenemos lo que había
+      client: data.client || prev.client,
+      area: data.area || prev.area,
+      origin: data.origin || prev.origin,
+      // Mapeamos category a category o title si prefieres
+      category: data.category || prev.category,
+      // La descripción técnica reemplaza la actual
+      description: data.description || prev.description,
+      // Si la IA detectó un título implícito (opcional, podrías sacarlo de category)
+      title: data.category ? `Falla: ${data.category}` : prev.title
+    }));
+  };
+
+  // Inicialización de datos
   useEffect(() => {
     if (isOpen) {
       if (incidentToEdit) {
@@ -57,11 +83,10 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
           severity: incidentToEdit.severity,
           category: incidentToEdit.category
         });
-        setTags(incidentToEdit.tags);
+        setTags(incidentToEdit.tags || []);
         setAiSuggestion(incidentToEdit.aiAnalysis || null);
         setEvidencePreview(incidentToEdit.evidenceUrl || null);
       } else {
-        // Generate a random Folio for new entries
         const randomFolio = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
         setFormData({
           folio: randomFolio,
@@ -84,6 +109,8 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
       }
       setErrors({});
       setIsDragging(false);
+      setShowAnnotator(false);
+      setTempImage(null);
     }
   }, [isOpen, incidentToEdit]);
 
@@ -92,16 +119,17 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: false }));
-    }
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: false }));
   };
 
-  // --- File Handling Logic ---
   const handleFileSelect = (file: File) => {
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onloadend = () => setEvidencePreview(reader.result as string);
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setTempImage(result);
+        setShowAnnotator(true);
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -113,18 +141,36 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setIsDragging(true);
   };
+  
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setIsDragging(false);
   };
+  
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setIsDragging(false);
     if (e.dataTransfer.files?.[0]) handleFileSelect(e.dataTransfer.files[0]);
   };
+
   const triggerFileSelect = () => fileInputRef.current?.click();
+  
   const removeEvidence = (e: React.MouseEvent) => {
-    e.stopPropagation(); setEvidencePreview(null); if (fileInputRef.current) fileInputRef.current.value = '';
+    e.stopPropagation(); setEvidencePreview(null); 
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
-  // --- End File Handling ---
+
+  const handleAnnotatorSave = (finalImage: string) => {
+    setEvidencePreview(finalImage);
+    setTempImage(null);
+    setShowAnnotator(false);
+  };
+
+  const handleAnnotatorCancel = () => {
+    if (tempImage && !evidencePreview) {
+        setEvidencePreview(tempImage);
+    }
+    setTempImage(null);
+    setShowAnnotator(false);
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {};
@@ -155,19 +201,9 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
 
     onSave({
       ...incidentToEdit,
-      folio: formData.folio,
-      title: formData.title,
-      schadentischDate: formData.schadentischDate,
+      ...formData,
       shift: Number(formData.shift),
       sorte: Number(formData.sorte),
-      status: formData.status,
-      origin: formData.origin,
-      client: formData.client,
-      area: formData.area,
-      responsibleName: formData.responsibleName,
-      description: formData.description,
-      severity: formData.severity,
-      category: formData.category,
       tags: tags,
       aiAnalysis: aiSuggestion || undefined,
       evidenceUrl: evidencePreview || undefined,
@@ -200,6 +236,53 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 overflow-y-auto custom-scrollbar">
+          
+          {/* 4. INTEGRACIÓN VISUAL: BARRA DE DICTADO INTELIGENTE */}
+          {!incidentToEdit && ( // Solo mostrar en nuevos registros
+            <div className="mb-8 p-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl shadow-lg">
+                <div className="bg-white rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex-1">
+                        <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                            <Sparkles size={16} className="text-indigo-500" /> 
+                            Llenado Rápido por Voz
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                            {isListening 
+                                ? "🎙️ Escuchando... Describe el problema, cliente, ubicación y origen." 
+                                : isProcessing 
+                                    ? "🧠 Analizando reporte y llenando campos..."
+                                    : "Presiona el micrófono y habla corrido. La IA llenará el formulario por ti."}
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {isProcessing ? (
+                             <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-600 rounded-full font-medium text-sm animate-pulse">
+                                <Loader2 size={18} className="animate-spin" /> Procesando
+                             </div>
+                        ) : isListening ? (
+                            <button 
+                                type="button"
+                                onClick={() => stopAndAnalyze(handleSmartFill)}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-full font-bold text-sm shadow-md transition-all animate-pulse"
+                            >
+                                <div className="w-2 h-2 bg-white rounded-full"></div> Detener
+                            </button>
+                        ) : (
+                            <button 
+                                type="button"
+                                onClick={startSmartListening}
+                                className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-200 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+                                title="Iniciar Dictado"
+                            >
+                                <Mic size={24} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+          )}
+
           <div className="space-y-6">
             
             {/* ROW 1: Identifiers */}
@@ -210,7 +293,7 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                 </div>
                 <div className="md:col-span-2">
                    <label className={labelClass}>Título Breve <span className="text-red-500">*</span></label>
-                   <input name="title" value={formData.title} onChange={handleChange} className={getInputClass('title')} placeholder="Resumen del problema..." autoFocus />
+                   <input name="title" value={formData.title} onChange={handleChange} className={getInputClass('title')} placeholder="Resumen del problema..." />
                 </div>
             </div>
 
@@ -270,8 +353,8 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                       <option value="BMW">BMW</option>
                       <option value="Ford">Ford</option>
                       <option value="Interno">Interno / Planta</option>
-                    </select>
-                    <ChevronDown className="absolute right-3 top-9 text-gray-400 pointer-events-none" size={16} />
+                   </select>
+                   <ChevronDown className="absolute right-3 top-9 text-gray-400 pointer-events-none" size={16} />
                 </div>
 
                 <div>
@@ -287,16 +370,16 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
 
             {incidentToEdit && (
               <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-xl">
-                 <div className="relative">
-                   <label className={`${labelClass} text-yellow-700`}>Estado Q-TICKER</label>
-                   <select name="status" value={formData.status} onChange={handleChange} className={`${selectClass} border-yellow-200 bg-white`}>
+                  <div className="relative">
+                    <label className={`${labelClass} text-yellow-700`}>Estado Q-TICKER</label>
+                    <select name="status" value={formData.status} onChange={handleChange} className={`${selectClass} border-yellow-200 bg-white`}>
                       <option value={Status.OPEN}>Abierto</option>
                       <option value={Status.IN_PROGRESS}>En Progreso</option>
                       <option value={Status.RESOLVED}>Resuelto</option>
                       <option value={Status.CLOSED}>Cerrado</option>
-                   </select>
-                   <ChevronDown className="absolute right-3 top-9 text-yellow-400 pointer-events-none" size={16} />
-                 </div>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-9 text-yellow-400 pointer-events-none" size={16} />
+                  </div>
               </div>
             )}
 
@@ -304,21 +387,22 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
             <div className="relative">
               <div className="flex justify-between items-end mb-1.5">
                 <label className={labelClass}>Descripción Detallada <span className="text-red-500">*</span></label>
+                {/* Botón antiguo de análisis manual, lo mantenemos por si acaso */}
                 <button type="button" onClick={handleAnalyze} disabled={isAnalyzing || formData.description.length < 5} className="flex items-center space-x-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100">
-                  {isAnalyzing ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} <span>IA Assist</span>
+                  {isAnalyzing ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} <span>Re-Analizar Texto</span>
                 </button>
               </div>
               <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className={`${getInputClass('description')} resize-none`} placeholder="Detalles técnicos de la falla..." />
               
               {aiSuggestion && (
-                <div className="mt-3 bg-blue-50 border border-blue-100 p-3 rounded-xl text-sm text-blue-900">
-                   <p className="font-bold text-xs uppercase mb-1 flex items-center gap-1"><Sparkles size={10}/> Sugerencia IA</p>
+                <div className="mt-3 bg-blue-50 border border-blue-100 p-3 rounded-xl text-sm text-blue-900 animate-in fade-in slide-in-from-top-2">
+                   <p className="font-bold text-xs uppercase mb-1 flex items-center gap-1"><Sparkles size={10}/> Sugerencia Técnica IA</p>
                    {aiSuggestion}
                 </div>
               )}
             </div>
 
-            {/* Evidence */}
+            {/* Evidence (With Damage Annotator) */}
             <div>
               <label className={labelClass}>Evidencia Visual</label>
               <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={onFileInputChange} />
@@ -326,8 +410,8 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                 <div className="relative h-48 w-full rounded-xl overflow-hidden group border border-gray-200 bg-gray-50">
                   <img src={evidencePreview} alt="Preview" className="w-full h-full object-contain" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-                     <button type="button" onClick={triggerFileSelect} className="p-2 bg-white/20 text-white rounded-full"><ImageIcon size={20} /></button>
-                     <button type="button" onClick={removeEvidence} className="p-2 bg-red-500/80 text-white rounded-full"><Trash2 size={20} /></button>
+                      <button type="button" onClick={triggerFileSelect} className="p-2 bg-white/20 text-white rounded-full hover:bg-white/30 transition-colors"><ImageIcon size={20} /></button>
+                      <button type="button" onClick={removeEvidence} className="p-2 bg-red-500/80 text-white rounded-full hover:bg-red-600/90 transition-colors"><Trash2 size={20} /></button>
                   </div>
                 </div>
               ) : (
@@ -339,7 +423,7 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                   onDrop={handleDrop}
                 >
                    <div className="text-gray-400"><Camera size={24} /></div>
-                   <span className="text-xs text-gray-500 mt-1">Click o arrastra imagen</span>
+                   <span className="text-xs text-gray-500 mt-1">Click para subir foto y anotar daño</span>
                 </div>
               )}
             </div>
@@ -354,6 +438,16 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
            </button>
         </div>
       </div>
+
+      {/* --- INTEGRACIÓN: PANTALLA DE ANOTACIÓN --- */}
+      {showAnnotator && tempImage && (
+        <DamageAnnotator 
+          imageSrc={tempImage}
+          onSave={handleAnnotatorSave}
+          onCancel={handleAnnotatorCancel}
+        />
+      )}
+
     </div>
   );
 };

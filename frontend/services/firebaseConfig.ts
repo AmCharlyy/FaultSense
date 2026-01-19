@@ -1,10 +1,10 @@
-// src/lib/firebase/firebaseConfig.ts
-
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth"; // ¡Importante para la autenticación!
-import { getAnalytics } from "firebase/analytics"; // Para Firebase Analytics
+import { getAuth } from "firebase/auth";
+import { getAnalytics } from "firebase/analytics";
+// Estas son las líneas que te daban error, ahora deben funcionar
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { getVertexAI, getGenerativeModel } from "firebase/vertexai";
 
-// Tu configuración de Firebase real para FaultSense
 const firebaseConfig = {
   apiKey: "AIzaSyBhmkSr2typO8x1BWDmx2pmYzYOkiTZvLo",
   authDomain: "fault-sense.firebaseapp.com",
@@ -15,11 +15,28 @@ const firebaseConfig = {
   measurementId: "G-145W93X3LC"
 };
 
-// Inicializa Firebase
+// 1. Inicializar App
 const app = initializeApp(firebaseConfig);
 
-// Obtiene la instancia de Auth para usar en tu authService
+// 2. Auth y Analytics (Lo que ya tenías)
 export const auth = getAuth(app);
+export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
-// Opcional: Si quieres usar Analytics en otros lugares de tu app
-export const analytics = getAnalytics(app);
+// 3. App Check (Seguridad con la clave SITE KEY que termina en ...DTDAquce-)
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  if (window.location.hostname === "localhost" || window.location.hostname.includes("firebaseapp.com")) {
+    const RECAPTCHA_SITE_KEY = "6Ld1EE8sAAAAANimkzkp7cxTNR-An__DTDAquce-";
+    
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(RECAPTCHA_SITE_KEY),
+      isTokenAutoRefreshEnabled: true,
+    });
+  }
+}
+
+// 4. Vertex AI (Inicialización del modelo)
+const vertexAI = getVertexAI(app);
+export const model = getGenerativeModel(vertexAI, { model: "gemini-1.5-flash" });
+
+export default app;
