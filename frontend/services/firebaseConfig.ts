@@ -3,7 +3,6 @@ import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 // Estas son las líneas que te daban error, ahora deben funcionar
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
-import { getVertexAI, getGenerativeModel } from "firebase/vertexai";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBhmkSr2typO8x1BWDmx2pmYzYOkiTZvLo",
@@ -35,8 +34,6 @@ if (typeof window !== "undefined") {
   }
 }
 
-// 4. Vertex AI (Inicialización del modelo)
-const vertexAI = getVertexAI(app);
-export const model = getGenerativeModel(vertexAI, { model: "gemini-1.5-flash" });
+
 
 export default app;
