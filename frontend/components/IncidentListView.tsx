@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Incident, Severity, Status, IncidentFilters } from '../types';
-import { Filter, Plus, Search, MoreVertical, Trash2, FileText, Edit3, SlidersHorizontal, X, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { Filter, Plus, Search, MoreVertical, Trash2, FileText, Edit3, SlidersHorizontal, X, ChevronDown, ChevronLeft, ChevronRight, Loader2, ClipboardList } from 'lucide-react';
 import { IncidentModal } from './IncidentModal';
 import { IncidentDetailModal } from './IncidentDetailModal';
 import { generateIncidentReport } from '../services/pdfService';
@@ -65,6 +65,7 @@ export const IncidentListView: React.FC = () => {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [modalView, setModalView] = useState<'default' | 'pre-analysis'>('default');
   
   // --- Filter Options State (from DB) ---
   const [clientOptions, setClientOptions] = useState<{value: string, label: string}[]>([{value: 'All', label: 'Todos'}]);
@@ -146,11 +147,22 @@ export const IncidentListView: React.FC = () => {
   };
 
   const handleCreate = () => {
-    setEditingIncident(null); setIsModalOpen(true);
+    setEditingIncident(null); 
+    setModalView('default');
+    setIsModalOpen(true);
   };
   
   const handleEdit = (incident: Incident) => {
-    setEditingIncident(incident); setIsModalOpen(true); setActiveDropdown(null);
+    setEditingIncident(incident); 
+    setModalView('default');
+    setIsModalOpen(true); setActiveDropdown(null);
+  };
+
+  const handlePreAnalysis = (incident: Incident) => {
+    setEditingIncident(incident);
+    setModalView('pre-analysis');
+    setIsModalOpen(true);
+    setActiveDropdown(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -332,6 +344,7 @@ export const IncidentListView: React.FC = () => {
                       {activeDropdown === incident.id && (
                         <div ref={dropdownRef} onClick={(e) => e.stopPropagation()} className="absolute right-6 top-10 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
                           <button onClick={() => { generateIncidentReport(incident); setActiveDropdown(null); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"><FileText size={16} /><span>PDF Q-TICKER</span></button>
+                          <button onClick={() => handlePreAnalysis(incident)} className="w-full text-left px-4 py-2.5 text-sm text-blue-700 hover:bg-blue-50 flex items-center space-x-2"><ClipboardList size={16} /><span>Pre-Análisis</span></button>
                           <button onClick={() => handleEdit(incident)} className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-2"><Edit3 size={16} /><span>Editar</span></button>
                           <button onClick={() => handleDelete(incident.id)} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"><Trash2 size={16} /><span>Eliminar</span></button>
                         </div>
@@ -369,7 +382,7 @@ export const IncidentListView: React.FC = () => {
 
       </div>
 
-      <IncidentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveIncident} incidentToEdit={editingIncident} />
+      <IncidentModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveIncident} incidentToEdit={editingIncident} initialView={modalView} />
       <IncidentDetailModal isOpen={isDetailOpen} onClose={() => setIsDetailOpen(false)} incident={selectedIncident} />
     </div>
   );

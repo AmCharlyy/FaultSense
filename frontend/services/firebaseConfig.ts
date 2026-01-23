@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
+import { getGenerativeModel, getAI } from "firebase/ai";
 // Estas son las líneas que te daban error, ahora deben funcionar
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
@@ -19,7 +21,12 @@ const app = initializeApp(firebaseConfig);
 
 // 2. Auth y Analytics (Lo que ya tenías)
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
+
+// 3. Inicializar Vertex AI (Gemini)
+const vertexAI = getAI(app);
+export const model = getGenerativeModel(vertexAI, { model: "gemini-1.5-flash" });
 
 // 3. App Check (Seguridad con la clave SITE KEY que termina en ...DTDAquce-)
 if (typeof window !== "undefined") {

@@ -246,10 +246,12 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
    const [formData, setFormData] = useState({
       partNumber: '',
       partName: '',
-      defectType: 'Visual',
-      description: '',
-      action: 'Pending',
-      reportedBy: ''
+      quantity: '',
+      cc: '',
+      operationNumber: '',
+      description: '', // Observaciones
+      nc: '',
+      reportedBy: '' // Nombre Responsable
    });
    const [preview, setPreview] = useState<string | null>(null);
    const [analyzing, setAnalyzing] = useState(false);
@@ -261,9 +263,11 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
          setFormData({
             partNumber: partToEdit.partNumber,
             partName: partToEdit.partName,
-            defectType: partToEdit.defectType,
+            quantity: (partToEdit as any).quantity || '',
+            cc: (partToEdit as any).cc || '',
+            operationNumber: (partToEdit as any).operationNumber || '',
             description: partToEdit.description,
-            action: partToEdit.action,
+            nc: (partToEdit as any).nc || '',
             reportedBy: partToEdit.reportedBy
          });
          setPreview(partToEdit.imageUrl || null);
@@ -272,9 +276,11 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
          setFormData({
             partNumber: '',
             partName: '',
-            defectType: 'Visual',
+            quantity: '',
+            cc: '',
+            operationNumber: '',
             description: '',
-            action: 'Pending',
+            nc: '',
             reportedBy: ''
          });
          setPreview(null);
@@ -302,9 +308,7 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
       const result = await analyzePartImage(preview);
       setFormData(prev => ({
          ...prev,
-         defectType: result.defectType || prev.defectType,
-         description: result.description || prev.description,
-         action: result.action === 'Scrap' || result.action === 'Rework' ? result.action : prev.action
+         description: result.description || prev.description
       }));
       setAnalyzing(false);
    };
@@ -337,20 +341,24 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
                   </div>
                </div>
 
-               <div>
-                  <label className={labelClass}>Tipo de Defecto</label>
-                  <select className={inputClass} value={formData.defectType} onChange={e => setFormData({...formData, defectType: e.target.value})}>
-                     <option>Visual (Rayón, Golpe)</option>
-                     <option>Dimensional (Fuera de tolerancia)</option>
-                     <option>Material (Porosidad, Grieta)</option>
-                     <option>Ensamble (Faltantes)</option>
-                     <option>Desconocido / Otro</option>
-                  </select>
+               <div className="grid grid-cols-3 gap-4">
+                  <div>
+                     <label className={labelClass}>Cantidad</label>
+                     <input type="number" required min="1" className={inputClass} value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                  </div>
+                  <div>
+                     <label className={labelClass}>C.C</label>
+                     <input className={inputClass} value={formData.cc} onChange={e => setFormData({...formData, cc: e.target.value})} />
+                  </div>
+                  <div>
+                     <label className={labelClass}>No. Operación</label>
+                     <input className={inputClass} value={formData.operationNumber} onChange={e => setFormData({...formData, operationNumber: e.target.value})} />
+                  </div>
                </div>
 
                <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label className={labelClass}>Descripción del Defecto</label>
+                    <label className={labelClass}>Observaciones</label>
                     <button 
                        type="button"
                        onClick={handleAIAnalyze}
@@ -364,20 +372,18 @@ const SchadentischModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, part
                   <textarea required rows={3} className={`${inputClass} resize-none`} placeholder="Detalles..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
                </div>
 
-               <div className="grid grid-cols-2 gap-4">
-                   <div>
-                      <label className={labelClass}>Acción Sugerida</label>
-                      <select className={inputClass} value={formData.action} onChange={e => setFormData({...formData, action: e.target.value})}>
-                         <option value="Pending">Pendiente</option>
-                         <option value="Scrap">Scrap (Desecho)</option>
-                         <option value="Rework">Retrabajo</option>
-                         <option value="Concession">Concesión</option>
-                      </select>
-                   </div>
-                   <div>
-                      <label className={labelClass}>Reportado Por</label>
-                      <input required className={inputClass} placeholder="Nombre" value={formData.reportedBy} onChange={e => setFormData({...formData, reportedBy: e.target.value})} />
-                   </div>
+               <div className="pt-2">
+                  <h3 className="text-sm font-bold text-gray-900 border-b border-gray-100 pb-2 mb-3">Responsable de detención</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                         <label className={labelClass}>N.C.</label>
+                         <input required className={inputClass} value={formData.nc} onChange={e => setFormData({...formData, nc: e.target.value})} />
+                      </div>
+                      <div>
+                         <label className={labelClass}>Nombre</label>
+                         <input required className={inputClass} value={formData.reportedBy} onChange={e => setFormData({...formData, reportedBy: e.target.value})} />
+                      </div>
+                  </div>
                </div>
 
                <div>

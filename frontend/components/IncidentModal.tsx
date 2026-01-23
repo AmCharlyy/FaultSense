@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Sparkles, Loader2, UploadCloud, ChevronDown, Camera, Trash2, ImageIcon, Mic } from 'lucide-react';
+import { X, Sparkles, Loader2, UploadCloud, ChevronDown, Camera, Trash2, ImageIcon, Mic, ClipboardList, ArrowLeft } from 'lucide-react';
 import { Incident, Severity, Status } from '../types';
 import { analyzeIncidentDescription } from '../services/geminiService';
 import { DamageAnnotator } from './DamageAnnotator'; 
 // 1. IMPORTAR EL HOOK DE VOZ INTELIGENTE
 import { useSmartVoice } from '../hooks/useSmartVoice';
+import { db } from '../services/firebaseConfig';
+import { collection, getDocs, addDoc } from 'firebase/firestore';
 
 interface IncidentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (incident: any) => void;
   incidentToEdit?: Incident | null;
+  initialView?: 'default' | 'pre-analysis';
 }
 
-export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, onSave, incidentToEdit }) => {
+export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, onSave, incidentToEdit, initialView = 'default' }) => {
   // --- Estados del Formulario ---
   const [formData, setFormData] = useState({
     folio: '',
@@ -21,20 +24,39 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
     schadentischDate: new Date().toISOString().split('T')[0],
     shift: 1,
     sorte: 0,
-    status: Status.OPEN,
+    status: 'Sin respuesta', // Valor por defecto solicitado
     origin: '',
     client: '',
     area: '',
     responsibleName: '',
     description: '',
     severity: Severity.MEDIUM,
-    category: 'General'
+    category: 'General',
+    // Nuevos campos
+    partNumber: '',
+    partName: '',
+    supplier: '',
+    partResponsible: '',
+    // Campos de PRE-ANALISIS
+    paFailure: '',
+    paHypothesis: '',
+    paAnalysis: '',
+    paActions: '',
+    paAdditional: '',
+    paConfirmed: 0,
+    paSegregated: 0,
+    paRepetitive: 'No',
+    paQmomo: '',
+    paResponse: ''
   });
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
+  const [partsCatalog, setPartsCatalog] = useState<any[]>([]); // Estado para el catálogo real de BD
+  const [isLoadingParts, setIsLoadingParts] = useState(false); // Nuevo estado de carga
+  const [showPreAnalysis, setShowPreAnalysis] = useState(false); // Estado para mostrar el formulario de Pre-Análisis
   
   // --- Estados de Imagen y Anotador ---
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
@@ -64,6 +86,50 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
     }));
   };
 
+  // --- EFECTO: CARGAR O CREAR TABLA DE PIEZAS EN BD ---
+  useEffect(() => {
+    const initializePartsTable = async () => {
+      setIsLoadingParts(true); // Iniciamos carga
+      const defaultParts = [
+        { number: '06H-105-021', name: 'CIGUEÑAL', supplier: 'VOLKSWAGEN GUANAJUATO', responsible: 'Ing. Roberto Gómez' },
+        { number: '06K-103-603', name: 'CARTER DE ACEITE', supplier: 'NEMAK MONTERREY', responsible: 'Lic. Ana Torres' },
+        { number: '5Q0-615-301', name: 'DISCO DE FRENO', supplier: 'BREMBO PUEBLA', responsible: 'Ing. Carlos Ruiz' }
+      ];
+
+      try {
+        const partsRef = collection(db, 'parts');
+        const snapshot = await getDocs(partsRef);
+        
+        if (!snapshot.empty) {
+          const dbParts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setPartsCatalog(dbParts);
+        } else {
+          console.log("Tabla de piezas vacía en BD. Creando registros iniciales...");
+          try {
+             await Promise.all(defaultParts.map(part => addDoc(partsRef, part)));
+             alert("¡Éxito! Se creó la colección 'parts' en Firebase correctamente.");
+             setPartsCatalog(defaultParts);
+          } catch (e: any) {
+             console.error("Error creando seed:", e);
+             // AVISO VISUAL DE ERROR
+             if (e.code === 'permission-denied') {
+                alert("⚠️ BLOQUEADO POR FIREBASE: No tienes permisos de escritura.\n\nSolución: Ve a Firebase Console -> Firestore Database -> Reglas y cambia 'allow write: if false' a 'allow write: if request.auth != null'.");
+             }
+             setPartsCatalog(defaultParts); // Usamos local mientras arreglas los permisos
+          }
+        }
+      } catch (error) {
+        console.error("Error al conectar con la base de datos de piezas:", error);
+        setPartsCatalog(defaultParts);
+      }
+      setIsLoadingParts(false); // Terminamos carga
+    };
+
+    if (isOpen) {
+      initializePartsTable();
+    }
+  }, [isOpen]);
+
   // Inicialización de datos
   useEffect(() => {
     if (isOpen) {
@@ -74,14 +140,28 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
           schadentischDate: incidentToEdit.schadentischDate,
           shift: incidentToEdit.shift,
           sorte: incidentToEdit.sorte,
-          status: incidentToEdit.status,
+          status: incidentToEdit.status as any, // Cast para aceptar strings personalizados
           origin: incidentToEdit.origin,
           client: incidentToEdit.client,
           area: incidentToEdit.area,
           responsibleName: incidentToEdit.responsibleName || incidentToEdit.assignedTo?.name || '',
           description: incidentToEdit.description,
           severity: incidentToEdit.severity,
-          category: incidentToEdit.category
+          category: incidentToEdit.category,
+          partNumber: (incidentToEdit as any).partNumber || '',
+          partName: (incidentToEdit as any).partName || '',
+          supplier: (incidentToEdit as any).supplier || '',
+          partResponsible: (incidentToEdit as any).partResponsible || '',
+          paFailure: (incidentToEdit as any).paFailure || '',
+          paHypothesis: (incidentToEdit as any).paHypothesis || '',
+          paAnalysis: (incidentToEdit as any).paAnalysis || '',
+          paActions: (incidentToEdit as any).paActions || '',
+          paAdditional: (incidentToEdit as any).paAdditional || '',
+          paConfirmed: (incidentToEdit as any).paConfirmed || 0,
+          paSegregated: (incidentToEdit as any).paSegregated || 0,
+          paRepetitive: (incidentToEdit as any).paRepetitive || 'No',
+          paQmomo: (incidentToEdit as any).paQmomo || '',
+          paResponse: (incidentToEdit as any).paResponse || ''
         });
         setTags(incidentToEdit.tags || []);
         setAiSuggestion(incidentToEdit.aiAnalysis || null);
@@ -94,14 +174,28 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
           schadentischDate: new Date().toISOString().split('T')[0],
           shift: 1,
           sorte: 0,
-          status: Status.OPEN,
+          status: 'Sin respuesta',
           origin: '',
           client: '',
           area: '',
           responsibleName: '',
           description: '',
           severity: Severity.MEDIUM,
-          category: 'General'
+          category: 'General',
+          partNumber: '',
+          partName: '',
+          supplier: '',
+          partResponsible: '',
+          paFailure: '',
+          paHypothesis: '',
+          paAnalysis: '',
+          paActions: '',
+          paAdditional: '',
+          paConfirmed: 0,
+          paSegregated: 0,
+          paRepetitive: 'No',
+          paQmomo: '',
+          paResponse: ''
         });
         setAiSuggestion(null);
         setTags([]);
@@ -111,8 +205,9 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
       setIsDragging(false);
       setShowAnnotator(false);
       setTempImage(null);
+      setShowPreAnalysis(initialView === 'pre-analysis');
     }
-  }, [isOpen, incidentToEdit]);
+  }, [isOpen, incidentToEdit, initialView]);
 
   if (!isOpen) return null;
 
@@ -120,6 +215,23 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: false }));
+  };
+
+  // Manejo de selección de pieza (Auto-llenado)
+  const handlePartChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedPartNumber = e.target.value;
+    const part = partsCatalog.find(p => p.number === selectedPartNumber);
+
+    setFormData(prev => ({
+      ...prev,
+      partNumber: selectedPartNumber,
+      partName: part ? part.name : '',
+      supplier: part ? part.supplier : '',
+      partResponsible: part ? part.responsible : '',
+      // Llenamos campos ocultos para compatibilidad con backend
+      title: part ? `${part.name} - ${selectedPartNumber}` : prev.title,
+      responsibleName: part ? part.responsible : prev.responsibleName
+    }));
   };
 
   const handleFileSelect = (file: File) => {
@@ -175,7 +287,7 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
   const validateForm = () => {
     const newErrors: Record<string, boolean> = {};
     let isValid = true;
-    const requiredFields = ['folio', 'title', 'schadentischDate', 'origin', 'client', 'area', 'responsibleName', 'description'];
+    const requiredFields = ['folio', 'schadentischDate', 'origin', 'client', 'area', 'partNumber']; // Quitamos title/desc, agregamos partNumber
     requiredFields.forEach(field => {
       if (!(formData as any)[field] || (formData as any)[field].toString().trim() === '') {
         newErrors[field] = true; isValid = false;
@@ -236,8 +348,80 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 overflow-y-auto custom-scrollbar">
-          
-          {/* 4. INTEGRACIÓN VISUAL: BARRA DE DICTADO INTELIGENTE */}
+          {showPreAnalysis ? (
+            // --- FORMULARIO DE PRE-ANÁLISIS ---
+            <div className="space-y-6 animate-in slide-in-from-right-4">
+               <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+                  <button type="button" onClick={() => setShowPreAnalysis(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                     <ArrowLeft size={20} className="text-gray-600" />
+                  </button>
+                  <div>
+                     <h3 className="text-lg font-bold text-gray-900">Pre-Análisis de Falla</h3>
+                     <p className="text-xs text-gray-500">Complete la información técnica preliminar</p>
+                  </div>
+               </div>
+
+               <div>
+                  <label className={labelClass}>Falla</label>
+                  <textarea name="paFailure" value={formData.paFailure} onChange={handleChange} rows={2} className={getInputClass('paFailure')} placeholder="Descripción de la falla..." />
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                     <label className={labelClass}>Causa / Hipótesis</label>
+                     <textarea name="paHypothesis" value={formData.paHypothesis} onChange={handleChange} rows={3} className={getInputClass('paHypothesis')} placeholder="Posible causa raíz..." />
+                  </div>
+                  <div>
+                     <label className={labelClass}>Análisis</label>
+                     <textarea name="paAnalysis" value={formData.paAnalysis} onChange={handleChange} rows={3} className={getInputClass('paAnalysis')} placeholder="Detalles del análisis..." />
+                  </div>
+               </div>
+
+               <div>
+                  <label className={labelClass}>Acciones Inmediatas</label>
+                  <textarea name="paActions" value={formData.paActions} onChange={handleChange} rows={2} className={getInputClass('paActions')} placeholder="Acciones de contención..." />
+               </div>
+
+               <div className="grid grid-cols-2 gap-5">
+                  <div>
+                     <label className={labelClass}>Confirmados (Cant)</label>
+                     <input type="number" name="paConfirmed" value={formData.paConfirmed} onChange={handleChange} className={getInputClass('paConfirmed')} />
+                  </div>
+                  <div>
+                     <label className={labelClass}>Segregados (Cant)</label>
+                     <input type="number" name="paSegregated" value={formData.paSegregated} onChange={handleChange} className={getInputClass('paSegregated')} />
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-2 gap-5">
+                  <div>
+                     <label className={labelClass}>Repetitivo</label>
+                     <select name="paRepetitive" value={formData.paRepetitive} onChange={handleChange} className={selectClass}>
+                        <option value="No">No</option>
+                        <option value="Si">Si</option>
+                     </select>
+                  </div>
+                  <div>
+                     <label className={labelClass}>Esp. Q-MOMO</label>
+                     <input name="paQmomo" value={formData.paQmomo} onChange={handleChange} className={getInputClass('paQmomo')} placeholder="Especificación..." />
+                  </div>
+               </div>
+
+               <div>
+                  <label className={labelClass}>Información Adicional</label>
+                  <textarea name="paAdditional" value={formData.paAdditional} onChange={handleChange} rows={2} className={getInputClass('paAdditional')} />
+               </div>
+
+               <div>
+                  <label className={labelClass}>Respuesta Responsable</label>
+                  <textarea name="paResponse" value={formData.paResponse} onChange={handleChange} rows={2} className={getInputClass('paResponse')} placeholder="Comentarios del responsable..." />
+               </div>
+            </div>
+          ) : (
+            // --- FORMULARIO PRINCIPAL ---
+            <div className="space-y-6 animate-in slide-in-from-left-4">
+            
+            {/* 4. INTEGRACIÓN VISUAL: BARRA DE DICTADO INTELIGENTE */}
           {!incidentToEdit && ( // Solo mostrar en nuevos registros
             <div className="mb-8 p-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-2xl shadow-lg">
                 <div className="bg-white rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -289,11 +473,21 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div>
                    <label className={labelClass}>Folio (Auto) <span className="text-red-500">*</span></label>
-                   <input name="folio" value={formData.folio} onChange={handleChange} className={`${getInputClass('folio')} font-mono font-bold text-gray-700`} placeholder="QT-2024-XXXX" />
+                   <input name="folio" value={formData.folio} onChange={handleChange} className={`${getInputClass('folio')} font-mono font-bold text-gray-700`} placeholder="QT-2024-XXXX" readOnly />
                 </div>
                 <div className="md:col-span-2">
-                   <label className={labelClass}>Título Breve <span className="text-red-500">*</span></label>
-                   <input name="title" value={formData.title} onChange={handleChange} className={getInputClass('title')} placeholder="Resumen del problema..." />
+                   <label className={labelClass}>Número de Parte <span className="text-red-500">*</span></label>
+                   <div className="relative">
+                     <select name="partNumber" value={formData.partNumber} onChange={handlePartChange} className={selectClass} disabled={isLoadingParts}>
+                        <option value="">{isLoadingParts ? "Cargando catálogo..." : "Seleccionar Pieza..."}</option>
+                        {partsCatalog.map(part => (
+                          <option key={part.number} value={part.number}>
+                            {part.number} - {part.name}
+                          </option>
+                        ))}
+                     </select>
+                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                   </div>
                 </div>
             </div>
 
@@ -312,27 +506,52 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                    </select>
                 </div>
                 <div>
-                   <label className={labelClass}>Sorte (Cant)</label>
+                   <label className={labelClass}>SORTE</label>
                    <input name="sorte" value={formData.sorte} onChange={handleChange} type="number" className={getInputClass('sorte')} placeholder="0" />
                 </div>
                 <div>
-                    <div className="relative">
-                      <label className={labelClass}>Prioridad</label>
-                      <select name="severity" value={formData.severity} onChange={handleChange} className={selectClass}>
-                        <option value={Severity.LOW}>Baja</option>
-                        <option value={Severity.MEDIUM}>Media</option>
-                        <option value={Severity.HIGH}>Alta</option>
-                        <option value={Severity.CRITICAL}>Crítica</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-9 text-gray-400 pointer-events-none" size={16} />
-                    </div>
+                   <label className={labelClass}>Estado Q-TICKER</label>
+                   <div className="relative">
+                     <select name="status" value={formData.status} onChange={handleChange} className={`${selectClass} font-medium text-blue-900 bg-blue-50 border-blue-200`}>
+                        <option value="Sin respuesta">Sin respuesta</option>
+                        <option value="En seguimiento">En seguimiento</option>
+                        <option value="Cerrado">Cerrado</option>
+                        <option value="Acciones no efectivas">Acciones no efectivas</option>
+                        <option value="Analisis rechazado">Análisis rechazado</option>
+                     </select>
+                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 pointer-events-none" size={16} />
+                   </div>
                 </div>
+            </div>
+
+            {/* BOTÓN PRE-ANÁLISIS */}
+            <div className="flex justify-end">
+               <button type="button" onClick={() => setShowPreAnalysis(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg font-bold text-xs hover:bg-blue-100 transition-colors border border-blue-200">
+                  <ClipboardList size={16} />
+                  PRE-ANALISIS
+               </button>
             </div>
 
             <div className="h-px bg-gray-100 w-full"></div>
 
             {/* ROW 3: Relations */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Campos Auto-llenados */}
+                <div>
+                   <label className={labelClass}>Nombre de Pieza</label>
+                   <input name="partName" value={formData.partName} readOnly className={`${getInputClass('partName')} bg-gray-100 text-gray-600`} />
+                </div>
+
+                <div>
+                   <label className={labelClass}>Proveedor</label>
+                   <input name="supplier" value={formData.supplier} readOnly className={`${getInputClass('supplier')} bg-gray-100 text-gray-600`} />
+                </div>
+
+                <div>
+                   <label className={labelClass}>Responsable de Pieza</label>
+                   <input name="partResponsible" value={formData.partResponsible} readOnly className={`${getInputClass('partResponsible')} bg-gray-100 text-gray-600`} />
+                </div>
+
                 <div className="relative">
                    <label className={labelClass}>Origen <span className="text-red-500">*</span></label>
                    <input name="origin" value={formData.origin} onChange={handleChange} list="origins" className={getInputClass('origin')} placeholder="Seleccionar origen..." />
@@ -368,40 +587,6 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                 </div>
             </div>
 
-            {incidentToEdit && (
-              <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-xl">
-                  <div className="relative">
-                    <label className={`${labelClass} text-yellow-700`}>Estado Q-TICKER</label>
-                    <select name="status" value={formData.status} onChange={handleChange} className={`${selectClass} border-yellow-200 bg-white`}>
-                      <option value={Status.OPEN}>Abierto</option>
-                      <option value={Status.IN_PROGRESS}>En Progreso</option>
-                      <option value={Status.RESOLVED}>Resuelto</option>
-                      <option value={Status.CLOSED}>Cerrado</option>
-                    </select>
-                    <ChevronDown className="absolute right-3 top-9 text-yellow-400 pointer-events-none" size={16} />
-                  </div>
-              </div>
-            )}
-
-            {/* Description */}
-            <div className="relative">
-              <div className="flex justify-between items-end mb-1.5">
-                <label className={labelClass}>Descripción Detallada <span className="text-red-500">*</span></label>
-                {/* Botón antiguo de análisis manual, lo mantenemos por si acaso */}
-                <button type="button" onClick={handleAnalyze} disabled={isAnalyzing || formData.description.length < 5} className="flex items-center space-x-1.5 text-xs font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100">
-                  {isAnalyzing ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />} <span>Re-Analizar Texto</span>
-                </button>
-              </div>
-              <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className={`${getInputClass('description')} resize-none`} placeholder="Detalles técnicos de la falla..." />
-              
-              {aiSuggestion && (
-                <div className="mt-3 bg-blue-50 border border-blue-100 p-3 rounded-xl text-sm text-blue-900 animate-in fade-in slide-in-from-top-2">
-                   <p className="font-bold text-xs uppercase mb-1 flex items-center gap-1"><Sparkles size={10}/> Sugerencia Técnica IA</p>
-                   {aiSuggestion}
-                </div>
-              )}
-            </div>
-
             {/* Evidence (With Damage Annotator) */}
             <div>
               <label className={labelClass}>Evidencia Visual</label>
@@ -427,7 +612,9 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                 </div>
               )}
             </div>
+            </div>
           </div>
+          )}
         </form>
 
         {/* Footer */}
