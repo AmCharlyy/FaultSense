@@ -1,3 +1,6 @@
+// ==========================================
+// ENUMS & CONSTANTS
+// ==========================================
 
 export enum Severity {
   LOW = 'Baja',
@@ -12,6 +15,10 @@ export enum Status {
   RESOLVED = 'Resuelto',
   CLOSED = 'Cerrado'
 }
+
+// ==========================================
+// CORE INTERFACES
+// ==========================================
 
 export interface User {
   id: string;
@@ -57,7 +64,42 @@ export interface Incident {
   category: string;        
 }
 
-// NEW: Server-Side Filtering & Pagination
+// ==========================================
+// SCHADENTISCH (NCP)
+// ==========================================
+
+export interface NCPart {
+  id: string;
+  partNumber: string;
+  partName: string;
+  defectType: string;
+  description: string;
+  action: 'Scrap' | 'Rework' | 'Concession' | 'Pending';
+  imageUrl?: string;
+  createdAt: string;
+  reportedBy: string;
+}
+
+// ==========================================
+// CLOUD MODULE (NUEVO)
+// ==========================================
+
+export interface CloudFile {
+  id: string;
+  name: string;
+  url: string;        // URL pública para visualización/descarga
+  type: string;       // MIME type (image/png, application/pdf, etc.)
+  size: string;       // Texto formateado (ej: "2.4 MB")
+  createdAt: string;  // ISO Date string
+  ownerId: string;    // ID del usuario que lo subió
+  ownerName: string;  // Nombre del usuario para mostrar en UI
+  storagePath?: string; // Ruta interna en Firebase Storage (opcional para frontend)
+}
+
+// ==========================================
+// FILTERS & PAGINATION
+// ==========================================
+
 export interface IncidentFilters {
   page: number;
   limit: number;
@@ -76,7 +118,10 @@ export interface PaginatedResponse<T> {
   totalPages: number;
 }
 
-// NEW: Aggregated Data Structure for Backend Optimization
+// ==========================================
+// DASHBOARD & ANALYTICS
+// ==========================================
+
 export interface DashboardMetrics {
   activeTickets: number;
   totalSorte: number;
@@ -91,17 +136,9 @@ export interface DashboardMetrics {
   }
 }
 
-export interface NCPart {
-  id: string;
-  partNumber: string;
-  partName: string;
-  defectType: string;
-  description: string;
-  action: 'Scrap' | 'Rework' | 'Concession' | 'Pending';
-  imageUrl?: string;
-  createdAt: string;
-  reportedBy: string;
-}
+// ==========================================
+// SYSTEM
+// ==========================================
 
 export interface Notification {
   id: string;
@@ -113,4 +150,12 @@ export interface Notification {
   createdAt: string;
 }
 
-export type ViewState = 'dashboard' | 'incidents' | 'analytics' | 'profile' | 'settings' | 'schadentisch';
+// Added 'cloud' to ViewState
+export type ViewState = 
+  | 'dashboard' 
+  | 'incidents' 
+  | 'analytics' 
+  | 'profile' 
+  | 'settings' 
+  | 'schadentisch' 
+  | 'cloud';

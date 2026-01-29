@@ -7,6 +7,7 @@ import { IncidentListView } from './components/IncidentListView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { ProfileView } from './components/ProfileView';
 import { SchadentischView } from './components/SchadentischView';
+import { CloudView } from './components/CloudView';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import { Incident, ViewState, User, DashboardMetrics } from './types';
@@ -30,8 +31,6 @@ const DEV_API_URL = 'http://localhost:6001';
 //    c) Si no es localhost, usa la URL de producción harcodeada.
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
                      (window.location.hostname === 'localhost' ? DEV_API_URL : PROD_API_URL);
-
-console.log("🔌 FaultSense Conectado a:", API_BASE_URL);
 
 // 4. Inyectamos la URL en el servicio de API
 configureApi(API_BASE_URL);
@@ -216,6 +215,7 @@ const App: React.FC = () => {
       case 'incidents': return <IncidentListView />;
       case 'schadentisch': return <SchadentischView />;
       case 'analytics': return <AnalyticsView incidents={allIncidentsForAnalytics} />;
+      case 'cloud': return <CloudView user={currentUser} />;
       case 'profile': return (
         <ProfileView
           user={currentUser}

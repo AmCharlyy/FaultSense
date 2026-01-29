@@ -1,5 +1,5 @@
 
-import { Incident, NCPart, User, Severity, Status, DashboardMetrics, IncidentFilters, PaginatedResponse } from '../types';
+import { Incident, NCPart, User, Severity, Status, DashboardMetrics, IncidentFilters, PaginatedResponse, CloudFile } from '../types';
 import { auth } from './firebaseConfig';
 
 // 1. VARIABLE PARA ALMACENAR LA URL BASE DE LA API
@@ -139,6 +139,46 @@ export const api = {
     update: (data: Partial<User>) => authenticatedFetch<User>('/api/user/profile', {
       method: 'PUT',
       body: JSON.stringify(data)
+    })
+  },
+
+  // CLOUD STORAGE
+  cloud: {
+    // 1. Listar archivos (CORREGIDO: Agregamos userId a la URL)
+    getMyFiles: () => {
+      const user = auth.currentUser;
+      // Validamos que haya usuario para evitar errores
+      if (!user) throw new Error("Debes iniciar sesión para ver tus archivos");
+      
+      // 👇 AQUÍ ESTÁ LA CLAVE: Añadimos ?userId=...
+      return authenticatedFetch<CloudFile[]>(`/api/cloud?userId=${user.uid}`);
+    },
+    
+    // 2. Subir archivo
+    upload: async (fileData: { name: string; url: string; type: string; size: string }) => {
+      const user = auth.currentUser; 
+      
+      const payload = {
+        ...fileData,
+        userId: user?.uid,
+        userName: user?.displayName || 'Usuario Web'
+      };
+
+      return authenticatedFetch<void>('/api/cloud/upload', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    },
+
+    // 3. Borrar uno
+    delete: (id: string) => authenticatedFetch<void>(`/api/cloud/${id}`, {
+      method: 'DELETE'
+    }),
+
+    // 4. Borrado masivo
+    bulkDelete: (ids: string[]) => authenticatedFetch<void>('/api/cloud/delete-bulk', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
     })
   }
 };

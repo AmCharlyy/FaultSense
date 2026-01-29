@@ -3,13 +3,16 @@ const router = express.Router();
 const verifyToken = require('../middlewares/authMiddleware');
 const { db } = require('../config/firebase');
 
-// Importar Controladores
+// Importar Controladores Existentes
 const dashboardController = require('../controllers/dashboardController');
 const incidentController = require('../controllers/incidentController');
 const ncPartsController = require('../controllers/ncPartsController');
 const userController = require('../controllers/userController');
 
-// Middleware de Autenticación
+// 👇 1. IMPORTAR LAS RUTAS DE CLOUD (NUEVO)
+const cloudRoutes = require('./cloudRoutes');
+
+// Middleware de Autenticación (Protege todo lo que esté debajo)
 router.use(verifyToken);
 
 // --- DASHBOARD ---
@@ -18,14 +21,19 @@ router.get('/dashboard/metrics', dashboardController.getMetrics);
 // --- INCIDENTES (CRUD COMPLETO) ---
 router.get('/incidents', incidentController.getIncidents);
 router.post('/incidents', incidentController.createIncident);
-router.put('/incidents/:id', incidentController.updateIncident); // Ruta actualizada
-router.delete('/incidents/:id', incidentController.deleteIncident); // Ruta actualizada
+router.put('/incidents/:id', incidentController.updateIncident);
+router.delete('/incidents/:id', incidentController.deleteIncident);
 
 // --- NC PARTS (SCHADENTISCH) ---
 router.get('/nc-parts', ncPartsController.getParts);
 router.post('/nc-parts', ncPartsController.createPart);
 router.put('/nc-parts/:id', ncPartsController.updatePart);
 router.delete('/nc-parts/:id', ncPartsController.deletePart);
+
+// --- CLOUD STORAGE (NUEVO) ---
+// Esto conectará todas las rutas definidas en cloudRoutes.js
+// Ejemplo: /api/cloud/upload, /api/cloud/, /api/cloud/:id
+router.use('/cloud', cloudRoutes);
 
 // --- PERFIL DE USUARIO ---
 router.get('/user/profile', userController.getProfile);

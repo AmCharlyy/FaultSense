@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, AlertCircle, BarChart3, User, Settings, Zap, PackageX } from 'lucide-react';
+import { LayoutDashboard, AlertCircle, BarChart3, User, Settings, Zap, PackageX, Cloud } from 'lucide-react';
 import { ViewState } from '../types';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onChangeView }) =
     { id: 'incidents', label: 'Incidentes', icon: AlertCircle },
     { id: 'schadentisch', label: 'Schadentisch', icon: PackageX },
     { id: 'analytics', label: 'Análisis', icon: BarChart3 },
+    { id: 'cloud', label: 'Cloud', icon: Cloud },
     { id: 'profile', label: 'Perfil', icon: User },
     { id: 'settings', label: 'Ajustes', icon: Settings },
   ];
