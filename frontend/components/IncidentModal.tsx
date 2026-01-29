@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Loader2, UploadCloud, ChevronDown, Camera, Trash2, ImageIcon, Mic, ClipboardList, ArrowLeft } from 'lucide-react';
 import { Incident, Severity, Status } from '../types';
 import { analyzeIncidentDescription } from '../services/geminiService';
+import { processVoiceWithOpenAI, analyzeFailureWithOpenAI } from '../services/openAIService';
 import { DamageAnnotator } from './DamageAnnotator'; 
 // 1. IMPORTAR EL HOOK DE VOZ INTELIGENTE
 import { useSmartVoice } from '../hooks/useSmartVoice';
 import { db } from '../services/firebaseConfig';
 import { collection, getDocs, addDoc } from 'firebase/firestore';
+
 
 interface IncidentModalProps {
   isOpen: boolean;
@@ -52,6 +54,7 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzingFailure, setIsAnalyzingFailure] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [partsCatalog, setPartsCatalog] = useState<any[]>([]); // Estado para el catálogo real de BD
@@ -117,6 +120,22 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
     return updated;
   });
 };
+
+  const handleAIAnalysis = async () => {
+    if (!formData.paFailure) return alert("Escribe primero la falla");
+  
+    setIsAnalyzingFailure(true);
+    const result = await analyzeFailureWithOpenAI(formData.paFailure);
+  
+    if (result) {
+      setFormData(prev => ({
+        ...prev,
+        paHypothesis: result.paHypothesis,
+        paAnalysis: result.paAnalysis
+      }));
+    }
+    setIsAnalyzingFailure(false);
+  };
 
   // --- EFECTO: CARGAR O CREAR TABLA DE PIEZAS EN BD ---
   useEffect(() => {
@@ -393,10 +412,38 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                   </div>
                </div>
 
-               <div>
-                  <label className={labelClass}>Falla</label>
-                  <textarea name="paFailure" value={formData.paFailure} onChange={handleChange} rows={2} className={getInputClass('paFailure')} placeholder="Descripción de la falla..." />
-               </div>
+               {/* --- SECCIÓN DE PRE-ANÁLISIS EN IncidentModal.tsx --- */}
+<div>
+  <label className={labelClass}>Falla</label>
+  <textarea 
+    name="paFailure" 
+    value={formData.paFailure} 
+    onChange={handleChange} 
+    rows={2} 
+    className={getInputClass('paFailure')} 
+    placeholder="Descripción de la falla..." 
+  />
+
+  {/* BOTÓN DE ANÁLISIS IA: Colócalo justo aquí */}
+  <button
+    type="button"
+    onClick={handleAIAnalysis}
+    disabled={isAnalyzingFailure || !formData.paFailure.trim()}
+    className="mt-2 flex items-center gap-2 px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg font-bold text-[10px] uppercase tracking-wider hover:bg-purple-100 transition-all border border-purple-200 disabled:opacity-50 shadow-sm"
+  >
+    {isAnalyzingFailure ? (
+      <>
+        <Loader2 size={14} className="animate-spin text-purple-600" />
+        Analizando Falla...
+      </>
+    ) : (
+      <>
+        <Sparkles size={14} className="text-purple-600" />
+        Sugerir Causa y Análisis con IA
+      </>
+    )}
+  </button>
+</div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>

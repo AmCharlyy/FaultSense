@@ -64,3 +64,36 @@ paConfirmed (number), paSegregated (number), paRepetitive (string: "Si" o "No").
     return null;
   }
 };
+
+// Añadir esta función a tu archivo openAIService.ts existente
+export const analyzeFailureWithOpenAI = async (failureDescription: string) => {
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { 
+        "Authorization": `Bearer ${OPENAI_API_KEY}`, 
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: `Eres un ingeniero de calidad experto en análisis de causa raíz (8Ds, 5 Whys). 
+            Analiza la falla y devuelve un JSON con:
+            "paHypothesis": una causa probable técnica y concisa. Se resumido con informacion clave,
+            "paAnalysis": un análisis detallado del impacto y posible origen. Se resumido con informacion clave, maximo 50 palabras.`
+          },
+          { role: "user", content: `Falla detectada: "${failureDescription}"` }
+        ],
+        response_format: { type: "json_object" }
+      })
+    });
+
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content);
+  } catch (error) {
+    console.error("Error en el análisis de falla:", error);
+    return null;
+  }
+};
