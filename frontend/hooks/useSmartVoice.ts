@@ -1,74 +1,46 @@
-import { useState, useRef, useEffect } from 'react';
-import { analyzeVoiceTranscript, SmartIncidentData } from '../services/geminiService';
+import { useState, useRef } from 'react';
+import { processVoiceWithOpenAI, SmartIncidentData } from '../services/openAIService';
 
 export const useSmartVoice = () => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const transcriptRef = useRef<string>(""); // Acumulador de texto
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
-  useEffect(() => {
-    // Configuración inicial de Web Speech API
-    if ('webkitSpeechRecognition' in window || 'speechRecognition' in window) {
-      // @ts-ignore
-      const SpeechRecognition = window.webkitSpeechRecognition || window.speechRecognition;
-      const rec = new SpeechRecognition();
-      rec.continuous = true; // IMPORTANTE: Permite hablar corrido sin cortes
-      rec.interimResults = true; // Para ver lo que dices en tiempo real
-      rec.lang = 'es-MX';
+  const startSmartListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
 
-      rec.onresult = (event: any) => {
-        let finalTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript + " ";
-          }
-        }
-        // Guardamos en el ref para no perderlo entre renders
-        if(finalTranscript) {
-            transcriptRef.current += finalTranscript;
-        }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
-      rec.onend = () => {
-        // Si se detiene "solo", cambiamos el estado visual
-        if (isListening) setIsListening(false);
-      };
-
-      recognitionRef.current = rec;
+      mediaRecorder.start();
+      mediaRecorderRef.current = mediaRecorder;
+      setIsListening(true);
+    } catch (err) {
+      alert("No se pudo acceder al micrófono. Revisa los permisos.");
     }
-  }, []);
-
-  const startSmartListening = () => {
-    transcriptRef.current = ""; // Limpiar buffer anterior
-    setIsListening(true);
-    recognitionRef.current?.start();
   };
 
   const stopAndAnalyze = async (onSuccess: (data: SmartIncidentData) => void) => {
+    if (!mediaRecorderRef.current) return;
     setIsListening(false);
-    recognitionRef.current?.stop();
-    
-    // Si no se dijo nada, salir
-    if (!transcriptRef.current) return;
-
     setIsProcessing(true);
-    
-    // Enviamos TODO lo que hablaste a Gemini
-    const data = await analyzeVoiceTranscript(transcriptRef.current);
-    
-    if (data) {
-      onSuccess(data);
-    } else {
-      alert("No pude entender el reporte. Intenta de nuevo.");
-    }
-    setIsProcessing(false);
+
+    mediaRecorderRef.current.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+      const data = await processVoiceWithOpenAI(audioBlob);
+      if (data) onSuccess(data);
+      setIsProcessing(false);
+      // Limpiar micrófono
+      mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop());
+    };
+
+    mediaRecorderRef.current.stop();
   };
 
-  return {
-    isListening,
-    isProcessing,
-    startSmartListening,
-    stopAndAnalyze
-  };
+  return { isListening, isProcessing, startSmartListening, stopAndAnalyze };
 };

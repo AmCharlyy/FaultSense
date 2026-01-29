@@ -70,21 +70,53 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
   const { isListening, isProcessing, startSmartListening, stopAndAnalyze } = useSmartVoice();
 
   // 3. CALLBACK PARA LLENAR LOS CAMPOS AUTOMÁTICAMENTE
+  // 3. CALLBACK PARA LLENAR LOS CAMPOS AUTOMÁTICAMENTE (ACTUALIZADO)
   const handleSmartFill = (data: any) => {
-    setFormData(prev => ({
-      ...prev,
-      // Solo actualizamos si la IA encontró algo, si no, mantenemos lo que había
-      client: data.client || prev.client,
-      area: data.area || prev.area,
-      origin: data.origin || prev.origin,
-      // Mapeamos category a category o title si prefieres
-      category: data.category || prev.category,
-      // La descripción técnica reemplaza la actual
-      description: data.description || prev.description,
-      // Si la IA detectó un título implícito (opcional, podrías sacarlo de category)
-      title: data.category ? `Falla: ${data.category}` : prev.title
-    }));
-  };
+  console.log("Datos recibidos de OpenAI:", data);
+
+  setFormData(prev => {
+    const updated = { ...prev };
+
+    // 1. Mapeo de campos de texto y selección
+    if (data.client) updated.client = data.client;
+    if (data.area) updated.area = data.area;
+    if (data.origin) updated.origin = data.origin;
+    if (data.responsibleName) updated.responsibleName = data.responsibleName;
+    if (data.status) updated.status = data.status;
+    
+    // 2. Mapeo de campos numéricos (Aseguramos que sean números reales)
+    if (data.shift) updated.shift = Number(data.shift);
+    if (data.sorte) updated.sorte = Number(data.sorte);
+    
+    // 3. Mapeo de campos de PRE-ANÁLISIS
+    if (data.paFailure) updated.paFailure = data.paFailure;
+    if (data.paHypothesis) updated.paHypothesis = data.paHypothesis;
+    if (data.paAnalysis) updated.paAnalysis = data.paAnalysis;
+    if (data.paActions) updated.paActions = data.paActions;
+    if (data.paConfirmed) updated.paConfirmed = Number(data.paConfirmed);
+    if (data.paSegregated) updated.paSegregated = Number(data.paSegregated);
+    if (data.paRepetitive) updated.paRepetitive = data.paRepetitive; // 'Si' o 'No'
+
+    // 4. Lógica especial para Número de Parte
+    if (data.partNumber) {
+      const part = partsCatalog.find(p => 
+        p.number.toLowerCase().includes(data.partNumber.toLowerCase())
+      );
+      if (part) {
+        updated.partNumber = part.number;
+        updated.partName = part.name;
+        updated.supplier = part.supplier;
+        updated.partResponsible = part.responsible;
+        // Si el responsable de la pieza es el mismo del reporte
+        if (!data.responsibleName) updated.responsibleName = part.responsible;
+      } else {
+        updated.partNumber = data.partNumber;
+      }
+    }
+
+    return updated;
+  });
+};
 
   // --- EFECTO: CARGAR O CREAR TABLA DE PIEZAS EN BD ---
   useEffect(() => {
@@ -440,29 +472,34 @@ export const IncidentModal: React.FC<IncidentModalProps> = ({ isOpen, onClose, o
                     </div>
 
                     <div className="flex items-center gap-3">
-                        {isProcessing ? (
-                             <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-600 rounded-full font-medium text-sm animate-pulse">
-                                <Loader2 size={18} className="animate-spin" /> Procesando
-                             </div>
-                        ) : isListening ? (
-                            <button 
-                                type="button"
-                                onClick={() => stopAndAnalyze(handleSmartFill)}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-full font-bold text-sm shadow-md transition-all animate-pulse"
-                            >
-                                <div className="w-2 h-2 bg-white rounded-full"></div> Detener
-                            </button>
-                        ) : (
-                            <button 
-                                type="button"
-                                onClick={startSmartListening}
-                                className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-200 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-                                title="Iniciar Dictado"
-                            >
-                                <Mic size={24} />
-                            </button>
-                        )}
-                    </div>
+  {isProcessing ? (
+    // Estado: Procesando con IA (Se muestra mientras la API de OpenAI responde)
+    <div className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-600 rounded-full font-medium text-sm animate-pulse border border-gray-200">
+      <Loader2 size={18} className="animate-spin text-indigo-600" />
+      <span>Analizando...</span>
+    </div>
+  ) : isListening ? (
+    // Estado: Grabando (El botón se vuelve rojo y parpadea)
+    <button 
+      type="button"
+      onClick={() => stopAndAnalyze(handleSmartFill)}
+      className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-full font-bold text-sm shadow-lg shadow-red-200 transition-all animate-pulse"
+    >
+      <div className="w-2 h-2 bg-white rounded-full animate-ping"></div>
+      Detener y Llenar
+    </button>
+  ) : (
+    // Estado: Reposo (Botón azul de micrófono listo para empezar)
+    <button 
+      type="button"
+      onClick={startSmartListening}
+      className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-200 flex items-center justify-center transition-all hover:scale-110 active:scale-95 group"
+      title="Dictar reporte completo"
+    >
+      <Mic size={24} className="group-hover:rotate-12 transition-transform" />
+    </button>
+  )}
+</div>
                 </div>
             </div>
           )}
